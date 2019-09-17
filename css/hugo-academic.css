@@ -26,6 +26,7 @@
 .row:after,
 .row:before {
   content: " ";
+  clear: both;
   display: table;
 }
 
