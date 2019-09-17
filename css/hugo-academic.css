@@ -14,6 +14,15 @@
   box-sizing: border-box;
 }
 
+/* I added column class CSS */
+.column {
+  float: left;
+  width: 33.33%;
+  padding: 5px;
+}
+/* Column class */
+
+
 .row:after,
 .row:before {
   content: " ";
