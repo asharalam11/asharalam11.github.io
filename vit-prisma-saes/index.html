@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>What SAEs read out of CLIP, SigLIP, and ViT — Ashar Alam</title>
+  <meta name="description" content="A controlled interpretability experiment: sparse autoencoders on three ViT-B/16 encoders trained with different objectives.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,600;1,9..144,300;1,9..144,400&family=Space+Grotesk:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           #0b0b0b;
+      --surface:      #131313;
+      --surface-hi:   #191919;
+      --border:       #1e1e1e;
+      --border-hi:    #2a2a2a;
+      --text:         #c8c8c8;
+      --text-muted:   #737373;
+      --text-faint:   #3d3d3d;
+      --heading:      #ebebeb;
+      --clip:         #7b9ef0;
+      --siglip:       #e8935a;
+      --accent:       #7b9ef0;
+    }
+
+    html { background: var(--bg); color: var(--text); }
+
+    body {
+      font-family: 'Space Grotesk', system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.72;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 0 1.5rem 7rem;
+    }
+
+    /* ── nav ─────────────────────────────────────────── */
+    nav {
+      padding: 1.2rem 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 3.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    nav a {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      letter-spacing: 0.02em;
+      transition: color 0.15s;
+    }
+    nav a:hover { color: var(--text); }
+
+    /* ── header ──────────────────────────────────────── */
+    header { margin-bottom: 2.5rem; }
+
+    .post-tag {
+      display: block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 1rem;
+    }
+
+    h1 {
+      font-family: 'Fraunces', serif;
+      font-size: clamp(1.85rem, 5vw, 2.55rem);
+      font-weight: 500;
+      font-style: italic;
+      line-height: 1.12;
+      color: var(--heading);
+      letter-spacing: -0.025em;
+      margin-bottom: 0.8rem;
+    }
+
+    .subtitle {
+      font-size: 1rem;
+      color: var(--text-muted);
+      margin-bottom: 1.4rem;
+      font-weight: 400;
+    }
+
+    .meta {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.76rem;
+      color: var(--text-faint);
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+    .meta a { color: var(--text-muted); text-decoration: none; transition: color 0.15s; }
+    .meta a:hover { color: var(--accent); }
+
+    /* ── tldr ────────────────────────────────────────── */
+    .tldr {
+      background: var(--surface);
+      border-left: 2px solid var(--accent);
+      border-radius: 0 4px 4px 0;
+      padding: 1.4rem 1.75rem;
+      margin: 2.5rem 0 3rem;
+    }
+    .tldr-label {
+      display: block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.8rem;
+    }
+    .tldr ul { list-style: none; padding: 0; }
+    .tldr li {
+      position: relative;
+      padding-left: 1.25rem;
+      font-size: 0.94rem;
+      padding-top: 0.2rem;
+      padding-bottom: 0.2rem;
+    }
+    .tldr li::before {
+      content: '→';
+      position: absolute;
+      left: 0;
+      color: var(--text-faint);
+    }
+
+    /* ── typography ──────────────────────────────────── */
+    h2 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.4rem;
+      font-weight: 500;
+      color: var(--heading);
+      margin: 3rem 0 0.9rem;
+      letter-spacing: -0.015em;
+    }
+
+    h3 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: var(--heading);
+      letter-spacing: 0.01em;
+      margin: 2rem 0 0.5rem;
+    }
+
+    p { margin-bottom: 1rem; }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    strong { color: var(--heading); font-weight: 500; }
+    em { font-style: italic; }
+
+    ul, ol { padding-left: 1.2rem; margin-bottom: 1rem; }
+    li { margin-bottom: 0.35rem; }
+
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.81em;
+      background: var(--surface-hi);
+      border: 1px solid var(--border-hi);
+      border-radius: 3px;
+      padding: 0.1em 0.38em;
+      color: #bfc6d4;
+    }
+
+    /* ── definition list ─────────────────────────────── */
+    dl.defs { margin: 1.25rem 0; }
+    dl.defs dt {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82rem;
+      color: var(--heading);
+      margin-top: 1.1rem;
+      margin-bottom: 0.2rem;
+    }
+    dl.defs dd { margin-left: 0; font-size: 0.95rem; }
+
+    /* ── figures ─────────────────────────────────────── */
+    figure { margin: 2.5rem 0; }
+
+    .fig-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.71rem;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 0.7rem;
+    }
+
+    figcaption {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      line-height: 1.55;
+      margin-top: 0.7rem;
+    }
+
+    /* PNG placeholder */
+    .ph {
+      background: var(--surface);
+      border: 1px dashed var(--border-hi);
+      border-radius: 5px;
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+    }
+    .ph-icon { font-size: 1.4rem; opacity: 0.2; margin-bottom: 0.6rem; }
+    .ph-desc { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.4rem; }
+    .ph-file {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--text-faint);
+    }
+
+    /* ── chart wrapper ───────────────────────────────── */
+    .chart-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1.5rem 1.5rem 1.1rem;
+    }
+
+    .chart-wrap {
+      position: relative;
+      height: 300px;
+    }
+
+    .chart-legend {
+      display: flex;
+      gap: 1.75rem;
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+    }
+    .legend-item { display: flex; align-items: flex-start; gap: 0.55rem; flex: 1; min-width: 140px; }
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 0.35rem;
+    }
+    .legend-text { font-size: 0.83rem; line-height: 1.4; }
+    .legend-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.76rem;
+      font-weight: 500;
+      margin-bottom: 0.15rem;
+    }
+    .legend-desc { color: var(--text-muted); font-size: 0.8rem; }
+
+    .chart-footnote {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--text-faint);
+      margin-top: 0.9rem;
+      line-height: 1.55;
+    }
+
+    /* ── rank chart specific ─────────────────────────── */
+    .rank-wrap { position: relative; height: 240px; }
+
+    /* ── table ───────────────────────────────────────── */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      margin: 1.25rem 0;
+    }
+    .data-table th {
+      padding: 0.45rem 0.7rem;
+      border-bottom: 1px solid var(--border-hi);
+      color: var(--text-muted);
+      font-weight: 500;
+      text-align: left;
+    }
+    .data-table td {
+      padding: 0.4rem 0.7rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .data-table tbody tr:last-child td { border-bottom: none; }
+    .data-table .r { text-align: right; }
+    .clip-val { color: var(--clip); }
+    .siglip-val { color: var(--siglip); }
+
+    /* ── inline note ─────────────────────────────────── */
+    .note {
+      background: var(--surface);
+      border-left: 2px solid var(--border-hi);
+      border-radius: 0 4px 4px 0;
+      padding: 0.9rem 1.2rem;
+      margin: 1.5rem 0;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+    .note.future { border-left-style: dashed; border-left-color: var(--text-faint); }
+    .note.caution { border-left-color: var(--siglip); }
+
+    /* ── repo block ──────────────────────────────────── */
+    .repo-block {
+      background: var(--surface-hi);
+      border: 1px solid var(--border-hi);
+      border-radius: 5px;
+      padding: 1rem 1.2rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      margin: 1rem 0;
+    }
+    .repo-block .label { color: var(--text-faint); margin-bottom: 0.35rem; }
+    .repo-block a { color: var(--accent); }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+
+    .chart-2x2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    .cell-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.67rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.35rem;
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="/">← asharalam11.github.io</a>
+  <a href="https://github.com/asharalam11/ViT-Prisma/tree/siglip-support" target="_blank">github ↗</a>
+</nav>
+
+<header>
+  <span class="post-tag">AI Safety · Mechanistic Interpretability</span>
+  <h1>What SAEs read out of<br>CLIP, SigLIP, and ViT</h1>
+  <p class="subtitle">A controlled experiment: same backbone, three objectives, one sparse autoencoder per layer.</p>
+  <div class="meta">
+    <span>Ashar Alam</span>
+    <span>2025</span>
+    <a href="https://github.com/asharalam11/ViT-Prisma/tree/siglip-support" target="_blank">code</a>
+    <a href="https://aisafety.training/" target="_blank">BlueDot AI Safety</a>
+  </div>
+</header>
+
+<div class="tldr">
+  <span class="tldr-label">TL;DR</span>
+  <ul>
+    <li>CLIP-B/16, SigLIP-B/16, and a supervised ViT-B/16 share the same architecture — only the training objective differs. That makes the objective the only variable.</li>
+    <li>One SAE per layer on each model's frozen activations. Measured explained variance (EV): how well a sparse code reconstructs a layer.</li>
+    <li>The objective measurably changes feature compressibility, and the effect is depth-dependent.</li>
+    <li>Supervised ViT is most compressible early (EV 0.94 at layer 0) and falls steepest. CLIP is most compressible overall with a mid-network EV bump. SigLIP declines most smoothly and reconstructs best at the final layer.</li>
+    <li>ReLU + L1 SAEs collapse on these activations (L0 &lt; 1.5 regardless of penalty). Top-$k$ is the fix and gives an exact sparsity dial.</li>
+    <li>Logit-lens faithfulness: CLIP's late layers survive the sparse round-trip almost perfectly (75% → 95%); SigLIP's mid-layers don't (U-shaped: 78, 64, 65, 75%).</li>
+  </ul>
+</div>
+
+
+<h2>Why care</h2>
+
+<p>Vision-language systems in high-stakes settings — autonomous driving, robotics — inherit a frozen pretrained encoder as their perception front-end. When that encoder fails silently on an odd input, the whole system acts on a wrong model of the world with no warning.</p>
+
+<p>SAEs are a leading tool for making an encoder's internal features human-readable so you can audit them. A natural precondition for that audit is knowing which objective produces more <em>inspectable</em> features, and where in the network inspection is reliable. That is the question here.</p>
+
+
+<h2>Setup: what "same backbone" actually means</h2>
+
+<p>The three models do not share weights. "Same backbone" means the same architecture: ViT-B/16 — 12 transformer blocks, a 768-dimensional residual stream, 16-pixel patches, 196 patch tokens. CLIP, SigLIP, and the supervised ViT are three entirely different sets of learned weights living in an identically-shaped container, trained with different objectives:</p>
+
+<dl class="defs">
+  <dt>CLIP</dt>
+  <dd>Contrastive image-text loss (softmax over a batch).</dd>
+  <dt>SigLIP</dt>
+  <dd>Sigmoid pairwise image-text loss (no softmax normalization across the batch).</dd>
+  <dt>Supervised ViT</dt>
+  <dd>Plain ImageNet-1k classification.</dd>
+</dl>
+
+<p>Because the architecture is fixed, the only variable left is the objective and its data. Any difference in feature structure is attributable to the objective, not depth, width, or model size. Same chassis, three engines: if they drive differently, it is the engine.</p>
+
+<p>There is a bonus: the activation spaces are identically shaped, so the SAE comparison is numerically like-for-like — same $d = 768$, same 196 tokens, same SAE hyperparameters across all three. "12 layers" is not a choice; it is the full depth of ViT-B/16. One SAE sits on each block's residual stream output (<code>hook_resid_post</code>), layers 0–11.</p>
+
+
+<h2>Background in three definitions</h2>
+
+<dl class="defs">
+  <dt>SAE</dt>
+  <dd>Encode an activation vector $\mathbf{x}$ into a wide but sparse code — here 128 non-zero entries out of a 3072-dimensional dictionary (4× expansion of the 768-dimensional input) — then decode back to $\hat{\mathbf{x}}$. If a small sparse code rebuilds $\mathbf{x}$ well, the information lived in few directions, and each sparse feature is a candidate concept.</dd>
+
+  <dt>EV (explained variance)</dt>
+  <dd>How much of a layer's activation variance the SAE reconstructs. Comparable across layers; raw MSE is not, because residual stream norms grow with depth.</dd>
+
+  <dt>Logit lens</dt>
+  <dd>Project a patch's activation onto text label embeddings and read off the nearest label. Run it on the raw activation and again on the SAE reconstruction to see how much the sparse code preserved.</dd>
+</dl>
+
+
+<h2>A practical negative result: ReLU + L1 collapses</h2>
+
+<p>The standard ReLU + L1 penalty SAE recipe collapses on these activations. L0 (active features per patch) falls below 1.5 across a 10× range of the L1 coefficient, and the SAE mostly outputs its decoder bias. Sparsity here is not L1-controllable.</p>
+
+<p>Switching to a top-$k$ activation makes L0 exactly $k$, at every layer, with zero dead features at every $k$ tried (32, 64, 128), and it cut MSE by roughly 3×. <strong>If you are training SAEs on CLIP- or SigLIP-style activations, start with top-$k$.</strong> One gotcha: keep <code>l1_coefficient</code> at a tiny non-zero value like <code>1e-8</code>, or the wandb logging divides by zero.</p>
+
+
+<h2>Result 1: the objective sets compressibility</h2>
+
+<p>One SAE per layer, all three models, top-$k$ with $k = 128$, <code>hook_resid_post</code>, ImageNet validation (50K images, 3 passes).</p>
+
+<figure>
+  <p class="fig-label">Fig. 1 — EV · L0 · MSE · dead features, by layer</p>
+  <div class="chart-box">
+    <div class="chart-2x2">
+      <div>
+        <div class="cell-label">Explained Variance</div>
+        <div style="position:relative;height:185px"><canvas id="fig1Ev"></canvas></div>
+      </div>
+      <div>
+        <div class="cell-label">L0 (active features / patch)</div>
+        <div style="position:relative;height:185px"><canvas id="fig1L0"></canvas></div>
+      </div>
+      <div>
+        <div class="cell-label">MSE loss</div>
+        <div style="position:relative;height:185px"><canvas id="fig1Mse"></canvas></div>
+      </div>
+      <div>
+        <div class="cell-label">Dead features</div>
+        <div style="position:relative;height:185px"><canvas id="fig1Dead"></canvas></div>
+      </div>
+    </div>
+    <div class="chart-legend">
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#7b9ef0"></div>
+        <div class="legend-text"><div class="legend-name" style="color:#7b9ef0">CLIP-B/16</div></div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#e8935a"></div>
+        <div class="legend-text"><div class="legend-name" style="color:#e8935a">SigLIP-B/16</div></div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#6ee7b7"></div>
+        <div class="legend-text"><div class="legend-name" style="color:#6ee7b7">ViT-B/16 (supervised)</div></div>
+      </div>
+    </div>
+  </div>
+  <figcaption>Every model's EV declines with depth — a shared depth effect. The differences in shape are the objective effect (see text).</figcaption>
+</figure>
+
+<p>Every model's EV declines with depth — a depth effect shared by all three, not an objective effect. The shapes differ:</p>
+
+<ul>
+  <li><strong>Supervised ViT:</strong> highest EV at layer 0 (0.94 — early edge and texture features are very compressible) but steepest decline (0.62 at layer 11) and highest deep-layer MSE.</li>
+  <li><strong>CLIP (contrastive):</strong> lowest MSE at every layer — most compressible overall — and the only model with a mid-network EV bump (around layer 7). Consistent with contrastive pooling producing a lower-rank mid-representation.</li>
+  <li><strong>SigLIP (sigmoid):</strong> smoothest decline and highest EV at the final layer (0.70 vs ~0.62 for the others). Sigmoid loss appears to preserve more distributed, reconstructable per-patch structure at the output.</li>
+</ul>
+
+
+<h2>The intuition: effective rank</h2>
+
+<p>A sparse code with a fixed budget can only capture a limited number of independent directions. If a layer's activations live in few directions (low effective rank), a small budget rebuilds them almost perfectly. If they spread over many directions (high rank), the same budget leaves a lot behind.</p>
+
+<figure>
+  <p class="fig-label">Fig. 2 — Toy illustration: same sparse budget, different compressibility</p>
+  <div class="chart-box">
+    <div class="rank-wrap">
+      <canvas id="rankChart"></canvas>
+    </div>
+  </div>
+  <figcaption>Synthetic data only — no real activations. This is the analogy, not a measurement. The inference from EV and logit-lens results is that CLIP's late layers sit closer to the low-rank regime; SigLIP's mid-layers closer to high-rank. Directly measuring the effective rank of the real activations is a stated next step.</figcaption>
+</figure>
+
+<div class="note future">
+  <strong>Future interactive demo candidate.</strong> This figure is a good candidate to rebuild as a live slider: vary the rank parameter and watch the reconstruction curves shift. The toy data is already structured for it.
+</div>
+
+<h3>Why k = 128, and why the value matters</h3>
+
+<p>$k = 128$ out of 3072 features is ~4% active — sparse enough to stay interpretable. Sweeping $k$ over 32, 64, 128, EV rises log-linearly (~+0.08 per doubling) with no sign of plateauing:</p>
+
+<figure>
+  <p class="fig-label">Fig. 3 — EV vs top-k, all layers</p>
+  <div class="chart-box">
+    <div style="position:relative;height:260px"><canvas id="fig3Ev"></canvas></div>
+    <p class="chart-footnote">SigLIP-B/16 only. k=32: layer 0 missing (training issue), layer 7 crashed — shown as gaps.</p>
+  </div>
+  <figcaption>The non-plateauing slope suggests the remaining deep-layer gap is data-limited, not capacity-limited. Reaching EV ~0.9 by $k$ alone would need $k \geq 256$ — roughly a twelfth of the dictionary active — which destroys the sparsity that makes an SAE interpretable. The honest lever for higher fidelity is more data, not a bigger $k$.</figcaption>
+</figure>
+
+
+<h2>Result 2: the same effect, seen on an image</h2>
+
+<p>Run the logit lens on the raw activations and again on the SAE reconstruction, then measure how many patches keep their label. This is a faithfulness probe: how much of what the model represents survives the sparse bottleneck.</p>
+
+<figure>
+  <p class="fig-label">Fig. 4 — Per-patch label agreement: original vs SAE reconstruction (7-label text lens)</p>
+  <div class="chart-box">
+    <div class="chart-wrap">
+      <canvas id="logitLensChart"></canvas>
+    </div>
+    <div class="chart-legend">
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--clip)"></div>
+        <div class="legend-text">
+          <div class="legend-name" style="color:var(--clip)">CLIP-B/16</div>
+          <div class="legend-desc">Monotonic rise to 95% — late layers converge toward a single dominant concept, a low-rank state the sparse code reproduces almost exactly.</div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--siglip)"></div>
+        <div class="legend-text">
+          <div class="legend-name" style="color:var(--siglip)">SigLIP-B/16</div>
+          <div class="legend-desc">U-shaped: mid-layers hold distributed, diverse per-patch structure — higher-rank and harder to reconstruct sparsely. More patches flip label after the round-trip.</div>
+        </div>
+      </div>
+    </div>
+    <p class="chart-footnote">† Supervised ViT: ~28–31% agreement via 1000-class class-logit lens. Not directly comparable — it shares no text encoder with CLIP or SigLIP, so the label spaces are incommensurable.</p>
+  </div>
+  <figcaption>Agreement = fraction of patches whose nearest text label is unchanged after the SAE round-trip. Single image; needs replication across many images and seeds before the curve shapes are airtight (see Limitations).</figcaption>
+</figure>
+
+<p>The data in full:</p>
+
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Layer</th>
+      <th class="r">CLIP-B/16</th>
+      <th class="r">SigLIP-B/16</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>0</td><td class="r clip-val">75%</td><td class="r siglip-val">78%</td></tr>
+    <tr><td>4</td><td class="r clip-val">82%</td><td class="r siglip-val">64%</td></tr>
+    <tr><td>8</td><td class="r clip-val">85%</td><td class="r siglip-val">65%</td></tr>
+    <tr><td>11</td><td class="r clip-val">95%</td><td class="r siglip-val">75%</td></tr>
+  </tbody>
+</table>
+
+<figure>
+  <p class="fig-label">Fig. 5 — SAE reconstruction logit lens: CLIP vs SigLIP, by layer</p>
+  <img src="img/sae_logit_lens_grids.png" alt="SAE reconstruction logit lens image grids: CLIP vs SigLIP, layers 0/4/8/11" style="width:100%;border-radius:5px;">
+  <figcaption>Visual complement to Fig. 4. CLIP's late-layer maps should be nearly identical before and after the round-trip; SigLIP's mid-layer maps should show more divergence.</figcaption>
+</figure>
+
+<figure>
+  <p class="fig-label">Fig. 6 — Raw logit lens across models (no SAE)</p>
+  <img src="img/raw_logit_lens.png" alt="Raw logit lens across CLIP, SigLIP1, and SigLIP2 — no SAE" style="width:100%;border-radius:5px;">
+  <figcaption>Context for what the SAEs are measuring: CLIP collapsing toward one concept in late layers, SigLIP holding spatial diversity.</figcaption>
+</figure>
+
+
+<h2>Limitations</h2>
+
+<ul>
+  <li><strong>Scale.</strong> 50K images, 3 passes. Deep-layer EV (~0.62–0.70) is well below the ~0.9 that full-scale SAEs reach, so deep-layer claims are proof-of-concept. The robust signal is the <em>contrast</em> between models, not the absolute numbers.</li>
+  <li><strong>Single seed.</strong> The logit-lens agreement numbers come from one image. They need many images and multiple seeds before the CLIP vs SigLIP curve is airtight.</li>
+  <li><strong>EV ≠ interpretability.</strong> High EV does not prove features are monosemantic. Feature-level interpretation (max-activating images per feature) is the obvious next step; the first attempt used too narrow an image set to be conclusive.</li>
+  <li><strong>Novelty not yet checked.</strong> Objective-dependent representation geometry and SAEs on CLIP or DINO are known. The plausibly new angle is the matched SigLIP vs CLIP vs ViT SAE comparison and the depth-dependent compressibility contrast. Treat as preliminary.</li>
+</ul>
+
+
+<h2>What's next</h2>
+
+<ol>
+  <li><strong>Feature interpretation</strong> on a diverse image set (full ImageNet validation, not a 10-class subset): name what selective features fire on at layers 4–6, per model. Runs on CPU locally.</li>
+  <li><strong>Capacity sweep</strong> — vary $k$ or expansion factor — to separate intrinsic structure from SAE undertraining, and quantify how much extra capacity SigLIP needs to match CLIP.</li>
+  <li><strong>Scale toward full ImageNet</strong> (1.28M images) to lift deep-layer EV.</li>
+  <li><strong>Robustness probe</strong> tied to the safety framing: do the interpretable features survive image degradation (fog, night, blur) on a driving dataset?</li>
+  <li>Add SigLIP2 and the second hook point (<code>hook_mlp_out</code>).</li>
+</ol>
+
+
+<h2>Reproduce</h2>
+
+<div class="repo-block">
+  <div class="label"># code</div>
+  <a href="https://github.com/asharalam11/ViT-Prisma/tree/siglip-support" target="_blank">github.com/asharalam11/ViT-Prisma</a> &nbsp;·&nbsp; branch: <code>siglip-support</code>
+</div>
+
+<p>SigLIP support and all notebooks are on <code>siglip-support</code> (loader, config, and weight conversion for <code>google/siglip-base-patch16-224</code> and <code>google/siglip2-base-patch16-224</code>).</p>
+
+<ul>
+  <li><code>colab/Explainer_What_We_Did.ipynb</code> — runs offline on CPU in ~10 seconds; shows the real EV-by-depth plot from the metrics plus the toy rank demo.</li>
+  <li><code>colab/SAE_Training.ipynb</code>, <code>SAE_Training_CLIP.ipynb</code>, <code>SAE_Training_ViT.ipynb</code>, <code>SAE_Eval_Comparison.ipynb</code>, <code>SAE_LogitLens_Comparison.ipynb</code> — training and evaluation pipeline.</li>
+</ul>
+
+<p>Feedback welcome, especially from anyone doing vision interpretability who can sanity-check the objective vs compressibility framing or point to prior work on the matched comparison.</p>
+
+
+<script>
+// ── data ──────────────────────────────────────────────────────────────────────
+// To swap in real ViT-Prisma exports: replace `values` with fetch('data/logit_lens.json')
+// and resolve into this same shape. One-line change.
+const logitLensData = {
+  layers: [0, 4, 8, 11],
+  models: {
+    'CLIP-B/16': {
+      values: [75, 82, 85, 95],
+      color: getComputedStyle(document.documentElement).getPropertyValue('--clip').trim()
+    },
+    'SigLIP-B/16': {
+      values: [78, 64, 65, 75],
+      color: getComputedStyle(document.documentElement).getPropertyValue('--siglip').trim()
+    }
+  },
+  note: 'Supervised ViT: ~28–31% via 1000-class logit. Not directly comparable — no shared text encoder.'
+};
+
+// Illustrative only — no real activations.
+const effectiveRankData = {
+  budgets: [1, 2, 3, 5, 8, 12, 18, 25, 35],
+  series: {
+    'Low-rank': {
+      values: [0.30, 0.52, 0.70, 0.87, 0.95, 0.98, 0.99, 1.00, 1.00],
+      color: getComputedStyle(document.documentElement).getPropertyValue('--clip').trim(),
+      dash: []
+    },
+    'High-rank': {
+      values: [0.04, 0.08, 0.12, 0.19, 0.29, 0.42, 0.58, 0.72, 0.88],
+      color: getComputedStyle(document.documentElement).getPropertyValue('--siglip').trim(),
+      dash: [5, 4]
+    }
+  }
+};
+
+// ── shared chart defaults ──────────────────────────────────────────────────────
+const GRID   = 'rgba(255,255,255,0.045)';
+const TICK   = '#555';
+const MONO   = "'JetBrains Mono', monospace";
+
+Chart.defaults.color = TICK;
+Chart.defaults.font.family = "'Space Grotesk', sans-serif";
+
+// ── Fig. 1 data ───────────────────────────────────────────────────────────────
+// Source: comparison/clip_topk_128.csv, siglip_topk_128.csv, vit_topk_128.csv
+const comparisonData = {
+  layers: [0,1,2,3,4,5,6,7,8,9,10,11],
+  models: {
+    'CLIP-B/16': {
+      color: '#7b9ef0',
+      ev:   [0.8014,0.7979,0.7505,0.7443,0.7255,0.7067,0.7253,0.8066,0.7672,0.7176,0.6968,0.6257],
+      mse:  [0.000857,0.001006,0.001184,0.001154,0.001234,0.001268,0.001278,0.001189,0.001741,0.002772,0.003748,0.005073],
+      l0:   Array(12).fill(128),
+      dead: Array(12).fill(0)
+    },
+    'SigLIP-B/16': {
+      color: '#e8935a',
+      ev:   [0.8687,0.7867,0.7768,0.7640,0.7585,0.7523,0.7607,0.7362,0.7157,0.6914,0.6848,0.6998],
+      mse:  [0.001465,0.002113,0.002252,0.002344,0.002444,0.002456,0.002724,0.003378,0.004723,0.006865,0.009668,0.014358],
+      l0:   Array(12).fill(128),
+      dead: Array(12).fill(0)
+    },
+    'ViT-B/16 (sup.)': {
+      color: '#6ee7b7',
+      ev:   [0.9391,0.8654,0.8017,0.7608,0.7356,0.7192,0.6960,0.6743,0.6484,0.6265,0.7119,0.6146],
+      mse:  [0.000780,0.001311,0.001881,0.002476,0.002969,0.003748,0.004670,0.006283,0.008876,0.012066,0.015167,0.022882],
+      l0:   Array(12).fill(128),
+      dead: Array(12).fill(0)
+    }
+  }
+};
+
+// ── Fig. 3 data ───────────────────────────────────────────────────────────────
+// Source: sae_metrics_topk_32/64/128.csv (SigLIP only)
+// null = missing or crashed run
+const kSweepData = {
+  layers: [0,1,2,3,4,5,6,7,8,9,10,11],
+  series: {
+    'k = 128': {
+      color: '#7b9ef0',
+      ev: [0.8687,0.7867,0.7768,0.7640,0.7585,0.7523,0.7607,0.7362,0.7157,0.6914,0.6848,0.6998]
+    },
+    'k = 64': {
+      color: '#a78bfa',
+      ev: [0.7864,0.6953,0.6916,0.6842,0.6801,0.6741,0.6936,0.6744,0.6511,0.6192,0.6194,0.6213]
+    },
+    'k = 32': {
+      color: '#e8935a',
+      ev: [null,0.6071,0.6130,0.6053,0.6044,0.6033,0.6325,null,0.5857,0.5623,0.5623,0.5440]
+    }
+  }
+};
+
+// ── Fig. 1: 4-panel comparison ────────────────────────────────────────────────
+(function buildFig1() {
+  const { layers, models } = comparisonData;
+  const entries = Object.entries(models);
+
+  function makeDatasets(key) {
+    return entries.map(([name, m]) => ({
+      label: name,
+      data: layers.map((x, i) => ({ x, y: m[key][i] })),
+      borderColor: m.color,
+      backgroundColor: 'transparent',
+      pointBackgroundColor: m.color,
+      pointRadius: 3,
+      pointHoverRadius: 5,
+      borderWidth: 1.5,
+      tension: 0.2,
+      fill: false
+    }));
+  }
+
+  function makeOpts(yMin, yMax, yFmt) {
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1a1a',
+          borderColor: '#2e2e2e',
+          borderWidth: 1,
+          titleFont: { family: MONO, size: 10 },
+          bodyFont: { family: MONO, size: 10 },
+          padding: 8,
+          callbacks: {
+            title: items => `Layer ${items[0].parsed.x}`,
+            label: item => ` ${item.dataset.label}: ${yFmt(item.parsed.y)}`
+          }
+        },
+        annotation: { annotations: {} }
+      },
+      scales: {
+        x: {
+          type: 'linear', min: -0.5, max: 11.5,
+          grid: { color: GRID },
+          border: { color: 'transparent' },
+          ticks: { color: TICK, font: { family: MONO, size: 9 },
+            callback: v => Number.isInteger(v) ? v : '' },
+          afterBuildTicks: s => {
+            s.ticks = [0,2,4,6,8,10,11].map(v => ({ value: v }));
+          }
+        },
+        y: {
+          min: yMin, max: yMax,
+          grid: { color: GRID },
+          border: { color: 'transparent' },
+          ticks: { color: TICK, font: { family: MONO, size: 9 }, callback: yFmt }
+        }
+      }
+    };
+  }
+
+  [
+    { id: 'fig1Ev',   key: 'ev',   yMin: 0.55, yMax: 1.00,  fmt: v => v.toFixed(2) },
+    { id: 'fig1L0',   key: 'l0',   yMin: 0,    yMax: 150,   fmt: v => v },
+    { id: 'fig1Mse',  key: 'mse',  yMin: 0,    yMax: null,  fmt: v => v.toFixed(4) },
+    { id: 'fig1Dead', key: 'dead', yMin: -0.05,yMax: 0.05,  fmt: v => v }
+  ].forEach(({ id, key, yMin, yMax, fmt }) => {
+    new Chart(document.getElementById(id), {
+      type: 'line',
+      data: { datasets: makeDatasets(key) },
+      options: makeOpts(yMin, yMax, fmt)
+    });
+  });
+}());
+
+// ── Fig. 3: EV vs k sweep (SigLIP) ───────────────────────────────────────────
+(function buildFig3() {
+  const { layers, series } = kSweepData;
+  const datasets = Object.entries(series).map(([name, s]) => ({
+    label: name,
+    data: layers.map((x, i) => ({ x, y: s.ev[i] })),
+    borderColor: s.color,
+    backgroundColor: 'transparent',
+    pointBackgroundColor: s.color,
+    pointRadius: 3,
+    pointHoverRadius: 5,
+    borderWidth: 1.5,
+    tension: 0.2,
+    fill: false,
+    spanGaps: false
+  }));
+
+  new Chart(document.getElementById('fig3Ev'), {
+    type: 'line',
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          align: 'end',
+          labels: { color: TICK, font: { family: MONO, size: 10 }, boxWidth: 20, padding: 10 }
+        },
+        tooltip: {
+          backgroundColor: '#1a1a1a',
+          borderColor: '#2e2e2e',
+          borderWidth: 1,
+          titleFont: { family: MONO, size: 10 },
+          bodyFont: { family: MONO, size: 10 },
+          padding: 8,
+          callbacks: {
+            title: items => `Layer ${items[0].parsed.x}`,
+            label: item => item.parsed.y != null
+              ? ` ${item.dataset.label}: ${item.parsed.y.toFixed(3)}`
+              : ` ${item.dataset.label}: —`
+          }
+        },
+        annotation: { annotations: {} }
+      },
+      scales: {
+        x: {
+          type: 'linear', min: -0.5, max: 11.5,
+          grid: { color: GRID },
+          border: { color: 'transparent' },
+          ticks: { color: TICK, font: { family: MONO, size: 10 } },
+          afterBuildTicks: s => {
+            s.ticks = kSweepData.layers.map(v => ({ value: v }));
+          }
+        },
+        y: {
+          min: 0.50, max: 0.92,
+          grid: { color: GRID },
+          border: { color: 'transparent' },
+          ticks: { color: TICK, font: { family: MONO, size: 10 }, callback: v => v.toFixed(2) }
+        }
+      }
+    }
+  });
+}());
+
+// ── logit lens chart ───────────────────────────────────────────────────────────
+(function buildLogitLens() {
+  const { layers, models } = logitLensData;
+
+  const datasets = Object.entries(models).map(([name, m]) => ({
+    label: name,
+    data: layers.map((x, i) => ({ x, y: m.values[i] })),
+    borderColor: m.color,
+    backgroundColor: m.color + '22',
+    pointBackgroundColor: m.color,
+    pointBorderColor: m.color,
+    pointRadius: 5,
+    pointHoverRadius: 7,
+    borderWidth: 2,
+    tension: 0.18,
+    fill: false
+  }));
+
+  new Chart(document.getElementById('logitLensChart'), {
+    type: 'line',
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1a1a',
+          borderColor: '#2e2e2e',
+          borderWidth: 1,
+          titleColor: '#999',
+          bodyColor: '#ccc',
+          titleFont: { family: MONO, size: 11 },
+          bodyFont: { family: MONO, size: 11 },
+          padding: 10,
+          callbacks: {
+            title: (items) => `Layer ${items[0].parsed.x}`,
+            label: (item) => ` ${item.dataset.label}: ${item.parsed.y}%`
+          }
+        },
+        annotation: {
+          annotations: {
+            clipPeak: {
+              type: 'label',
+              xValue: 11,
+              yValue: 97.5,
+              content: ['95%'],
+              color: '#7b9ef0cc',
+              font: { family: MONO, size: 10 },
+              padding: 0
+            },
+            siglipDip: {
+              type: 'label',
+              xValue: 4,
+              yValue: 60,
+              content: ['dip: 64%'],
+              color: '#e8935acc',
+              font: { family: MONO, size: 10 },
+              padding: 0
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'linear',
+          min: -0.5,
+          max: 12,
+          grid: { color: GRID },
+          border: { color: 'transparent' },
+          ticks: {
+            color: TICK,
+            font: { family: MONO, size: 11 },
+            callback: (v) => [0, 4, 8, 11].includes(v) ? `Layer ${v}` : ''
+          },
+          afterBuildTicks: (scale) => {
+            scale.ticks = [0, 4, 8, 11].map(v => ({ value: v }));
+          }
+        },
+        y: {
+          min: 55,
+          max: 100,
+          grid: { color: GRID },
+          border: { color: 'transparent' },
+          ticks: {
+            color: TICK,
+            font: { family: MONO, size: 11 },
+            callback: (v) => `${v}%`
+          }
+        }
+      }
+    }
+  });
+}());
+
+// ── effective rank toy chart ───────────────────────────────────────────────────
+(function buildRankChart() {
+  const { budgets, series } = effectiveRankData;
+
+  const datasets = Object.entries(series).map(([name, s]) => ({
+    label: name,
+    data: budgets.map((x, i) => ({ x, y: s.values[i] })),
+    borderColor: s.color,
+    backgroundColor: 'transparent',
+    pointBackgroundColor: s.color,
+    pointRadius: 3,
+    pointHoverRadius: 5,
+    borderWidth: 2,
+    borderDash: s.dash,
+    tension: 0.3,
+    fill: false
+  }));
+
+  new Chart(document.getElementById('rankChart'), {
+    type: 'line',
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          align: 'end',
+          labels: {
+            color: TICK,
+            font: { family: MONO, size: 10 },
+            boxWidth: 20,
+            usePointStyle: false,
+            padding: 12
+          }
+        },
+        tooltip: {
+          backgroundColor: '#1a1a1a',
+          borderColor: '#2e2e2e',
+          borderWidth: 1,
+          titleFont: { family: MONO, size: 10 },
+          bodyFont: { family: MONO, size: 10 },
+          callbacks: {
+            title: (items) => `Budget: ${items[0].parsed.x} directions`,
+            label: (item) => ` ${item.dataset.label}: ${(item.parsed.y * 100).toFixed(0)}% EV`
+          }
+        },
+        annotation: { annotations: {} }
+      },
+      scales: {
+        x: {
+          type: 'linear',
+          min: 0,
+          max: 37,
+          grid: { color: GRID },
+          border: { color: 'transparent' },
+          title: {
+            display: true,
+            text: 'directions used (sparse budget)',
+            color: TICK,
+            font: { family: MONO, size: 10 }
+          },
+          ticks: { color: TICK, font: { family: MONO, size: 10 } }
+        },
+        y: {
+          min: 0,
+          max: 1.05,
+          grid: { color: GRID },
+          border: { color: 'transparent' },
+          title: {
+            display: true,
+            text: 'variance explained',
+            color: TICK,
+            font: { family: MONO, size: 10 }
+          },
+          ticks: {
+            color: TICK,
+            font: { family: MONO, size: 10 },
+            callback: (v) => `${Math.round(v * 100)}%`
+          }
+        }
+      }
+    }
+  });
+}());
+</script>
+
+</body>
+</html>
