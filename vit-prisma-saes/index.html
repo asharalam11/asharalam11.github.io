@@ -55,6 +55,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 1rem;
     }
     nav a {
       font-family: 'JetBrains Mono', monospace;
@@ -63,8 +64,12 @@
       text-decoration: none;
       letter-spacing: 0.02em;
       transition: color 0.15s;
+      white-space: nowrap;
     }
     nav a:hover { color: var(--text); }
+    nav a:first-child { color: var(--heading); flex-shrink: 0; }
+    .nav-links { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+    .nav-active { color: var(--accent) !important; }
 
     /* ── header ──────────────────────────────────────── */
     header { margin-bottom: 2.5rem; }
