@@ -105,7 +105,7 @@
     .meta {
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.76rem;
-      color: var(--text-faint);
+      color: var(--text-muted);
       display: flex;
       gap: 1.5rem;
       flex-wrap: wrap;
@@ -377,7 +377,7 @@
 <div class="tldr">
   <span class="tldr-label">TL;DR</span>
   <ul>
-    <li>CLIP-B/16, SigLIP-B/16, and a supervised ViT-B/16 share the same architecture — only the training objective differs. That makes the objective the only variable.</li>
+    <li>CLIP-B/16, SigLIP-B/16, and a supervised ViT-B/16 share the same architecture. Only the training objective differs, making it the only variable.</li>
     <li>One SAE per layer on each model's frozen activations. Measured explained variance (EV): how well a sparse code reconstructs a layer.</li>
     <li>The objective measurably changes feature compressibility, and the effect is depth-dependent.</li>
     <li>Supervised ViT is most compressible early (EV 0.94 at layer 0) and falls steepest. CLIP is most compressible overall with a mid-network EV bump. SigLIP declines most smoothly and reconstructs best at the final layer.</li>
@@ -389,14 +389,14 @@
 
 <h2>Why care</h2>
 
-<p>Vision-language systems in high-stakes settings — autonomous driving, robotics — inherit a frozen pretrained encoder as their perception front-end. When that encoder fails silently on an odd input, the whole system acts on a wrong model of the world with no warning.</p>
+<p>Vision-language systems in high-stakes settings (autonomous driving, robotics) inherit a frozen pretrained encoder as their perception front-end. When that encoder fails silently on an odd input, the whole system acts on a wrong model of the world with no warning.</p>
 
 <p>SAEs are a leading tool for making an encoder's internal features human-readable so you can audit them. A natural precondition for that audit is knowing which objective produces more <em>inspectable</em> features, and where in the network inspection is reliable. That is the question here.</p>
 
 
 <h2>Setup: what "same backbone" actually means</h2>
 
-<p>The three models do not share weights. "Same backbone" means the same architecture: ViT-B/16 — 12 transformer blocks, a 768-dimensional residual stream, 16-pixel patches, 196 patch tokens. CLIP, SigLIP, and the supervised ViT are three entirely different sets of learned weights living in an identically-shaped container, trained with different objectives:</p>
+<p>The three models do not share weights. "Same backbone" means the same architecture: ViT-B/16: 12 transformer blocks, a 768-dimensional residual stream, 16-pixel patches, 196 patch tokens. CLIP, SigLIP, and the supervised ViT are three entirely different sets of learned weights living in an identically-shaped container, trained with different objectives:</p>
 
 <dl class="defs">
   <dt>CLIP</dt>
@@ -409,14 +409,14 @@
 
 <p>Because the architecture is fixed, the only variable left is the objective and its data. Any difference in feature structure is attributable to the objective, not depth, width, or model size. Same chassis, three engines: if they drive differently, it is the engine.</p>
 
-<p>There is a bonus: the activation spaces are identically shaped, so the SAE comparison is numerically like-for-like — same $d = 768$, same 196 tokens, same SAE hyperparameters across all three. "12 layers" is not a choice; it is the full depth of ViT-B/16. One SAE sits on each block's residual stream output (<code>hook_resid_post</code>), layers 0–11.</p>
+<p>There is a bonus: the activation spaces are identically shaped, so the SAE comparison is numerically like-for-like: same $d = 768$, same 196 tokens, same SAE hyperparameters across all three. "12 layers" is not a choice; it is the full depth of ViT-B/16. One SAE sits on each block's residual stream output (<code>hook_resid_post</code>), layers 0–11.</p>
 
 
 <h2>Background in three definitions</h2>
 
 <dl class="defs">
   <dt>SAE</dt>
-  <dd>Encode an activation vector $\mathbf{x}$ into a wide but sparse code — here 128 non-zero entries out of a 3072-dimensional dictionary (4× expansion of the 768-dimensional input) — then decode back to $\hat{\mathbf{x}}$. If a small sparse code rebuilds $\mathbf{x}$ well, the information lived in few directions, and each sparse feature is a candidate concept.</dd>
+  <dd>Encode an activation vector $\mathbf{x}$ into a wide but sparse code (here, 128 non-zero entries out of a 3072-dimensional dictionary (4× expansion of the 768-dimensional input)), then decode back to $\hat{\mathbf{x}}$. If a small sparse code rebuilds $\mathbf{x}$ well, the information lived in few directions, and each sparse feature is a candidate concept.</dd>
 
   <dt>EV (explained variance)</dt>
   <dd>How much of a layer's activation variance the SAE reconstructs. Comparable across layers; raw MSE is not, because residual stream norms grow with depth.</dd>
@@ -438,7 +438,7 @@
 <p>One SAE per layer, all three models, top-$k$ with $k = 128$, <code>hook_resid_post</code>, ImageNet validation (50K images, 3 passes).</p>
 
 <figure>
-  <p class="fig-label">Fig. 1 — EV · L0 · MSE · dead features, by layer</p>
+  <p class="fig-label">Fig. 1: EV · L0 · MSE · dead features, by layer</p>
   <div class="chart-box">
     <div class="chart-2x2">
       <div>
@@ -473,14 +473,14 @@
       </div>
     </div>
   </div>
-  <figcaption>Every model's EV declines with depth — a shared depth effect. The differences in shape are the objective effect (see text).</figcaption>
+  <figcaption>Every model's EV declines with depth, a shared effect. The differences in shape are attributable to the objective (see text).</figcaption>
 </figure>
 
-<p>Every model's EV declines with depth — a depth effect shared by all three, not an objective effect. The shapes differ:</p>
+<p>Every model's EV declines with depth, a shared effect, not an objective one. The shapes differ:</p>
 
 <ul>
-  <li><strong>Supervised ViT:</strong> highest EV at layer 0 (0.94 — early edge and texture features are very compressible) but steepest decline (0.62 at layer 11) and highest deep-layer MSE.</li>
-  <li><strong>CLIP (contrastive):</strong> lowest MSE at every layer — most compressible overall — and the only model with a mid-network EV bump (around layer 7). Consistent with contrastive pooling producing a lower-rank mid-representation.</li>
+  <li><strong>Supervised ViT:</strong> highest EV at layer 0 (0.94; early edge and texture features are very compressible) but steepest decline (0.62 at layer 11) and highest deep-layer MSE.</li>
+  <li><strong>CLIP (contrastive):</strong> lowest MSE at every layer, most compressible overall, and the only model with a mid-network EV bump (around layer 7). Consistent with contrastive pooling producing a lower-rank mid-representation.</li>
   <li><strong>SigLIP (sigmoid):</strong> smoothest decline and highest EV at the final layer (0.70 vs ~0.62 for the others). Sigmoid loss appears to preserve more distributed, reconstructable per-patch structure at the output.</li>
 </ul>
 
@@ -490,13 +490,13 @@
 <p>A sparse code with a fixed budget can only capture a limited number of independent directions. If a layer's activations live in few directions (low effective rank), a small budget rebuilds them almost perfectly. If they spread over many directions (high rank), the same budget leaves a lot behind.</p>
 
 <figure>
-  <p class="fig-label">Fig. 2 — Toy illustration: same sparse budget, different compressibility</p>
+  <p class="fig-label">Fig. 2: Toy illustration, same sparse budget, different compressibility</p>
   <div class="chart-box">
     <div class="rank-wrap">
       <canvas id="rankChart"></canvas>
     </div>
   </div>
-  <figcaption>Synthetic data only — no real activations. This is the analogy, not a measurement. The inference from EV and logit-lens results is that CLIP's late layers sit closer to the low-rank regime; SigLIP's mid-layers closer to high-rank. Directly measuring the effective rank of the real activations is a stated next step.</figcaption>
+  <figcaption>Synthetic data only (no real activations). This is the analogy, not a measurement. The inference from EV and logit-lens results is that CLIP's late layers sit closer to the low-rank regime; SigLIP's mid-layers closer to high-rank. Directly measuring the effective rank of the real activations is a stated next step.</figcaption>
 </figure>
 
 <div class="note future">
@@ -505,15 +505,15 @@
 
 <h3>Why k = 128, and why the value matters</h3>
 
-<p>$k = 128$ out of 3072 features is ~4% active — sparse enough to stay interpretable. Sweeping $k$ over 32, 64, 128, EV rises log-linearly (~+0.08 per doubling) with no sign of plateauing:</p>
+<p>$k = 128$ out of 3072 features is ~4% active, sparse enough to stay interpretable. Sweeping $k$ over 32, 64, 128, EV rises log-linearly (~+0.08 per doubling) with no sign of plateauing:</p>
 
 <figure>
-  <p class="fig-label">Fig. 3 — EV vs top-k, all layers</p>
+  <p class="fig-label">Fig. 3: EV vs top-k, all layers</p>
   <div class="chart-box">
     <div style="position:relative;height:260px"><canvas id="fig3Ev"></canvas></div>
-    <p class="chart-footnote">SigLIP-B/16 only. k=32: layer 0 missing (training issue), layer 7 crashed — shown as gaps.</p>
+    <p class="chart-footnote">SigLIP-B/16 only. k=32: layer 0 missing (training issue), layer 7 crashed, shown as gaps.</p>
   </div>
-  <figcaption>The non-plateauing slope suggests the remaining deep-layer gap is data-limited, not capacity-limited. Reaching EV ~0.9 by $k$ alone would need $k \geq 256$ — roughly a twelfth of the dictionary active — which destroys the sparsity that makes an SAE interpretable. The honest lever for higher fidelity is more data, not a bigger $k$.</figcaption>
+  <figcaption>The non-plateauing slope suggests the remaining deep-layer gap is data-limited, not capacity-limited. Reaching EV ~0.9 by $k$ alone would need $k \geq 256$, roughly a twelfth of the dictionary active, which destroys the sparsity that makes an SAE interpretable. The honest lever for higher fidelity is more data, not a bigger $k$.</figcaption>
 </figure>
 
 
@@ -522,7 +522,7 @@
 <p>Run the logit lens on the raw activations and again on the SAE reconstruction, then measure how many patches keep their label. This is a faithfulness probe: how much of what the model represents survives the sparse bottleneck.</p>
 
 <figure>
-  <p class="fig-label">Fig. 4 — Per-patch label agreement: original vs SAE reconstruction (7-label text lens)</p>
+  <p class="fig-label">Fig. 4: Per-patch label agreement, original vs SAE reconstruction (7-label text lens)</p>
   <div class="chart-box">
     <div class="chart-wrap">
       <canvas id="logitLensChart"></canvas>
@@ -532,18 +532,18 @@
         <div class="legend-dot" style="background:var(--clip)"></div>
         <div class="legend-text">
           <div class="legend-name" style="color:var(--clip)">CLIP-B/16</div>
-          <div class="legend-desc">Monotonic rise to 95% — late layers converge toward a single dominant concept, a low-rank state the sparse code reproduces almost exactly.</div>
+          <div class="legend-desc">Monotonic rise to 95%: late layers converge toward a single dominant concept, a low-rank state the sparse code reproduces almost exactly.</div>
         </div>
       </div>
       <div class="legend-item">
         <div class="legend-dot" style="background:var(--siglip)"></div>
         <div class="legend-text">
           <div class="legend-name" style="color:var(--siglip)">SigLIP-B/16</div>
-          <div class="legend-desc">U-shaped: mid-layers hold distributed, diverse per-patch structure — higher-rank and harder to reconstruct sparsely. More patches flip label after the round-trip.</div>
+          <div class="legend-desc">U-shaped: mid-layers hold distributed, diverse per-patch structure, higher-rank and harder to reconstruct sparsely. More patches flip label after the round-trip.</div>
         </div>
       </div>
     </div>
-    <p class="chart-footnote">† Supervised ViT: ~28–31% agreement via 1000-class class-logit lens. Not directly comparable — it shares no text encoder with CLIP or SigLIP, so the label spaces are incommensurable.</p>
+    <p class="chart-footnote">† Supervised ViT: ~28–31% agreement via 1000-class class-logit lens. Not directly comparable: it shares no text encoder with CLIP or SigLIP, so the label spaces are incommensurable.</p>
   </div>
   <figcaption>Agreement = fraction of patches whose nearest text label is unchanged after the SAE round-trip. Single image; needs replication across many images and seeds before the curve shapes are airtight (see Limitations).</figcaption>
 </figure>
@@ -567,13 +567,13 @@
 </table>
 
 <figure>
-  <p class="fig-label">Fig. 5 — SAE reconstruction logit lens: CLIP vs SigLIP, by layer</p>
+  <p class="fig-label">Fig. 5: SAE reconstruction logit lens, CLIP vs SigLIP, by layer</p>
   <img src="img/sae_logit_lens_grids.png" alt="SAE reconstruction logit lens image grids: CLIP vs SigLIP, layers 0/4/8/11" style="width:100%;border-radius:5px;">
   <figcaption>Visual complement to Fig. 4. CLIP's late-layer maps should be nearly identical before and after the round-trip; SigLIP's mid-layer maps should show more divergence.</figcaption>
 </figure>
 
 <figure>
-  <p class="fig-label">Fig. 6 — Raw logit lens across models (no SAE)</p>
+  <p class="fig-label">Fig. 6: Raw logit lens across models (no SAE)</p>
   <img src="img/raw_logit_lens.png" alt="Raw logit lens across CLIP, SigLIP1, and SigLIP2 — no SAE" style="width:100%;border-radius:5px;">
   <figcaption>Context for what the SAEs are measuring: CLIP collapsing toward one concept in late layers, SigLIP holding spatial diversity.</figcaption>
 </figure>
@@ -593,7 +593,7 @@
 
 <ol>
   <li><strong>Feature interpretation</strong> on a diverse image set (full ImageNet validation, not a 10-class subset): name what selective features fire on at layers 4–6, per model. Runs on CPU locally.</li>
-  <li><strong>Capacity sweep</strong> — vary $k$ or expansion factor — to separate intrinsic structure from SAE undertraining, and quantify how much extra capacity SigLIP needs to match CLIP.</li>
+  <li><strong>Capacity sweep:</strong> vary $k$ or expansion factor to separate intrinsic structure from SAE undertraining, and quantify how much extra capacity SigLIP needs to match CLIP.</li>
   <li><strong>Scale toward full ImageNet</strong> (1.28M images) to lift deep-layer EV.</li>
   <li><strong>Robustness probe</strong> tied to the safety framing: do the interpretable features survive image degradation (fog, night, blur) on a driving dataset?</li>
   <li>Add SigLIP2 and the second hook point (<code>hook_mlp_out</code>).</li>
@@ -610,8 +610,8 @@
 <p>SigLIP support and all notebooks are on <code>siglip-support</code> (loader, config, and weight conversion for <code>google/siglip-base-patch16-224</code> and <code>google/siglip2-base-patch16-224</code>).</p>
 
 <ul>
-  <li><code>colab/Explainer_What_We_Did.ipynb</code> — runs offline on CPU in ~10 seconds; shows the real EV-by-depth plot from the metrics plus the toy rank demo.</li>
-  <li><code>colab/SAE_Training.ipynb</code>, <code>SAE_Training_CLIP.ipynb</code>, <code>SAE_Training_ViT.ipynb</code>, <code>SAE_Eval_Comparison.ipynb</code>, <code>SAE_LogitLens_Comparison.ipynb</code> — training and evaluation pipeline.</li>
+  <li><code>colab/Explainer_What_We_Did.ipynb</code>: runs offline on CPU in ~10 seconds; shows the real EV-by-depth plot from the metrics plus the toy rank demo.</li>
+  <li><code>colab/SAE_Training.ipynb</code>, <code>SAE_Training_CLIP.ipynb</code>, <code>SAE_Training_ViT.ipynb</code>, <code>SAE_Eval_Comparison.ipynb</code>, <code>SAE_LogitLens_Comparison.ipynb</code>: training and evaluation pipeline.</li>
 </ul>
 
 <p>Feedback welcome, especially from anyone doing vision interpretability who can sanity-check the objective vs compressibility framing or point to prior work on the matched comparison.</p>
@@ -633,7 +633,7 @@ const logitLensData = {
       color: getComputedStyle(document.documentElement).getPropertyValue('--siglip').trim()
     }
   },
-  note: 'Supervised ViT: ~28–31% via 1000-class logit. Not directly comparable — no shared text encoder.'
+  note: 'Supervised ViT: ~28–31% via 1000-class logit. Not directly comparable (no shared text encoder).'
 };
 
 // Illustrative only — no real activations.
