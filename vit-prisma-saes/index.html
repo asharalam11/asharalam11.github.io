@@ -365,7 +365,7 @@
 <header>
   <span class="post-tag">AI Safety · Mechanistic Interpretability</span>
   <h1>What SAEs read out of<br>CLIP, SigLIP, and ViT</h1>
-  <p class="subtitle">A controlled experiment: same backbone, three objectives, one sparse autoencoder per layer.</p>
+  <p class="subtitle">A near-controlled comparison: same backbone, three training objectives, one sparse autoencoder per layer.</p>
   <div class="meta">
     <span>Ashar Alam</span>
     <span>Jul 19, 2026</span>
@@ -377,7 +377,7 @@
 <div class="tldr">
   <span class="tldr-label">TL;DR</span>
   <ul>
-    <li>CLIP-B/16, SigLIP-B/16, and a supervised ViT-B/16 share the same architecture. Only the training objective differs, making it the only variable.</li>
+    <li>CLIP-B/16, SigLIP-B/16, and a supervised ViT-B/16 share the same architecture. The main thing that differs is the training objective (though the training datasets differ too — see Setup).</li>
     <li>One SAE per layer on each model's frozen activations. Measured explained variance (EV): how well a sparse code reconstructs a layer.</li>
     <li>The objective measurably changes feature compressibility, and the effect is depth-dependent.</li>
     <li>Supervised ViT is most compressible early (EV 0.94 at layer 0) and falls steepest. CLIP is most compressible overall with a mid-network EV bump. SigLIP declines most smoothly and reconstructs best at the final layer.</li>
@@ -407,7 +407,7 @@
   <dd>Plain ImageNet-1k classification.</dd>
 </dl>
 
-<p>Because the architecture is fixed, the only variable left is the objective and its data. Any difference in feature structure is attributable to the objective, not depth, width, or model size. Same chassis, three engines: if they drive differently, it is the engine.</p>
+<p>Because the architecture is fixed, differences can't come from depth, width, or model size. What differs is the training objective — and, unavoidably, the training data (CLIP on WIT, SigLIP on WebLI, the supervised ViT on ImageNet-1k) and its scale. So any difference in feature structure is attributable to objective and data together, which this design can't cleanly separate. Same chassis, three engines — though also three different fuels; a difference in how they drive is some mix of the two.</p>
 
 <p>There is a bonus: the activation spaces are identically shaped, so the SAE comparison is numerically like-for-like: same $d = 768$, same 196 tokens, same SAE hyperparameters across all three. "12 layers" is not a choice; it is the full depth of ViT-B/16. One SAE sits on each block's residual stream output (<code>hook_resid_post</code>), layers 0–11.</p>
 
@@ -476,18 +476,18 @@
   <figcaption>Every model's EV declines with depth, a shared effect. The differences in shape are attributable to the objective (see text).</figcaption>
 </figure>
 
-<p>Every model's EV declines with depth, a shared effect, not an objective one. The shapes differ:</p>
+<p>The shapes differ:</p>
 
 <ul>
   <li><strong>Supervised ViT:</strong> highest EV at layer 0 (0.94; early edge and texture features are very compressible) but steepest decline (0.62 at layer 11) and highest deep-layer MSE.</li>
-  <li><strong>CLIP (contrastive):</strong> lowest MSE at every layer, most compressible overall, and the only model with a mid-network EV bump (around layer 7). Consistent with contrastive pooling producing a lower-rank mid-representation.</li>
+  <li><strong>CLIP (contrastive):</strong> lowest MSE at every layer beyond the first (the supervised ViT edges it at layer 0), most compressible overall, and the only model with a mid-network EV bump (around layer 7) — plausibly contrastive pooling producing a lower-rank mid-representation, though this is a single-seed observation (see Limitations).</li>
   <li><strong>SigLIP (sigmoid):</strong> smoothest decline and highest EV at the final layer (0.70 vs ~0.62 for the others). Sigmoid loss appears to preserve more distributed, reconstructable per-patch structure at the output.</li>
 </ul>
 
 
 <h2>The intuition: effective rank</h2>
 
-<p>A sparse code with a fixed budget can only capture a limited number of independent directions. If a layer's activations live in few directions (low effective rank), a small budget rebuilds them almost perfectly. If they spread over many directions (high rank), the same budget leaves a lot behind.</p>
+<p>A sparse code with a fixed budget can only capture a limited number of independent directions. If a layer's activations live in few directions (low effective rank), a small budget rebuilds them almost perfectly. If they spread over many directions (high rank), the same budget leaves a lot behind. One caveat to hold onto: the toy below reconstructs from top <em>principal</em> directions (linear rank), while the SAE uses a sparse, nonlinear code. The two can diverge — a high-rank space can still reconstruct well if its features align with the dictionary — so treat effective rank as a motivating picture, not the mechanism.</p>
 
 <figure>
   <p class="fig-label">Fig. 2: Toy illustration, same sparse budget, different compressibility</p>
@@ -505,7 +505,7 @@
 
 <h3>Why k = 128, and why the value matters</h3>
 
-<p>$k = 128$ out of 3072 features is ~4% active, sparse enough to stay interpretable. Sweeping $k$ over 32, 64, 128, EV rises log-linearly (~+0.08 per doubling) with no sign of plateauing:</p>
+<p>$k = 128$ out of 3072 features is ~4% active, sparse enough to stay interpretable. Sweeping $k$ over 32, 64, 128 on SigLIP, EV rises log-linearly (~+0.08 per doubling) with no sign of plateauing:</p>
 
 <figure>
   <p class="fig-label">Fig. 3: EV vs top-k, all layers</p>
@@ -513,7 +513,7 @@
     <div style="position:relative;height:260px"><canvas id="fig3Ev"></canvas></div>
     <p class="chart-footnote">SigLIP-B/16 only. k=32: layer 0 missing (training issue), layer 7 crashed, shown as gaps.</p>
   </div>
-  <figcaption>The non-plateauing slope suggests the remaining deep-layer gap is data-limited, not capacity-limited. Reaching EV ~0.9 by $k$ alone would need $k \geq 256$, roughly a twelfth of the dictionary active, which destroys the sparsity that makes an SAE interpretable. The honest lever for higher fidelity is more data, not a bigger $k$.</figcaption>
+  <figcaption>The non-plateauing slope suggests the remaining deep-layer gap is data-limited, not capacity-limited. Reaching EV ~0.9 by $k$ alone would take several more doublings for the deep layers (at ~+0.08 per doubling, a ~0.70 layer needs roughly $k \approx 1024$; only the already-high early layers get there near $k = 256$) — well past the point where the active-feature fraction destroys the sparsity that makes an SAE interpretable. The honest lever for higher fidelity is more data, not a bigger $k$.</figcaption>
 </figure>
 
 
@@ -583,7 +583,8 @@
 
 <ul>
   <li><strong>Scale.</strong> 50K images, 3 passes. Deep-layer EV (~0.62–0.70) is well below the ~0.9 that full-scale SAEs reach, so deep-layer claims are proof-of-concept. The robust signal is the <em>contrast</em> between models, not the absolute numbers.</li>
-  <li><strong>Single seed.</strong> The logit-lens agreement numbers come from one image. They need many images and multiple seeds before the CLIP vs SigLIP curve is airtight.</li>
+  <li><strong>Objective vs. data.</strong> The three models differ not only in training objective but in training dataset (WIT, WebLI, ImageNet-1k) and scale. This design cannot separate the two, so read every result as "objective + data," not objective alone.</li>
+  <li><strong>Single seed.</strong> The agreement numbers come from one image, and every curve is a single training run. Beyond the overall trends, the mid/late non-monotonic bumps (CLIP's EV rise near layer 7, the supervised ViT's spike at layer 10) may not survive multiple seeds — treat them as suggestive, not established. Airtight claims need many images and several seeds.</li>
   <li><strong>EV ≠ interpretability.</strong> High EV does not prove features are monosemantic. Feature-level interpretation (max-activating images per feature) is the obvious next step; the first attempt used too narrow an image set to be conclusive.</li>
   <li><strong>Novelty not yet checked.</strong> Objective-dependent representation geometry and SAEs on CLIP or DINO are known. The plausibly new angle is the matched SigLIP vs CLIP vs ViT SAE comparison and the depth-dependent compressibility contrast. Treat as preliminary.</li>
 </ul>
